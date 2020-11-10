@@ -1,5 +1,5 @@
 // index.ts
-const GREETING = 'Hello, AWS!';
+const GREETING = 'Lambda updated!';
 export async function main(event: any, context: any) {
   console.log(GREETING);
   return GREETING;
