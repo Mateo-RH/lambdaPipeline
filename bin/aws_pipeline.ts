@@ -13,6 +13,8 @@ const lambdaStack = new LambdaStack(app, 'LambdaStack', {
 new PipelineStack(app, 'PipelineStack', {
   lambdaCode: lambdaStack.lambdaCode,
   githubToken: 'awsPipeline',
+  prod_cognito_id: 'prod',
+  dev_cognito_id: 'dev',
   env: {
     region: 'us-west-1',
   },

@@ -8,6 +8,8 @@ import { App, Stack, StackProps, SecretValue } from '@aws-cdk/core';
 export interface PipelineStackProps extends StackProps {
   readonly lambdaCode: lambda.CfnParametersCode;
   readonly githubToken: string;
+  readonly dev_cognito_id: string;
+  readonly prod_cognito_id: string;
 }
 
 export class PipelineStack extends Stack {
@@ -54,10 +56,38 @@ export class PipelineStack extends Stack {
         buildImage: codebuild.LinuxBuildImage.STANDARD_2_0,
       },
     });
+    const reactBuild = new codebuild.PipelineProject(this, 'ReactBuild', {
+      buildSpec: codebuild.BuildSpec.fromObject({
+        version: '0.2',
+        phases: {
+          install: {
+            // commands: [
+            //   'cd frontend',
+            //   `sed -i 's+http://localhost:3000/+https://contracts.artifik.no/+g' src/aws-pool.js`,
+            //   `sed -i "s+${props.dev_cognito_id}+${props.prod_cognito_id}+g" src/aws-pool.js`,
+            //   'npm install',
+            // ],
+            commands: ['cd frontend', 'npm install'],
+          },
+          build: {
+            commands: 'npm run build',
+          },
+        },
+        artifacts: {
+          'base-directory': 'frontend/build',
+          files: ['**/*'],
+          'discard-paths': 'no',
+        },
+      }),
+      environment: {
+        buildImage: codebuild.LinuxBuildImage.STANDARD_2_0,
+      },
+    });
 
     const sourceOutput = new codepipeline.Artifact();
     const cdkBuildOutput = new codepipeline.Artifact('CdkBuildOutput');
     const lambdaBuildOutput = new codepipeline.Artifact('LambdaBuildOutput');
+    const reactBuildOutput = new codepipeline.Artifact('ReactAppOutput');
     new codepipeline.Pipeline(this, 'Pipeline', {
       stages: [
         {
@@ -68,7 +98,8 @@ export class PipelineStack extends Stack {
               output: sourceOutput,
               owner: 'Mateo-RH',
               repo: 'lambdaPipeline',
-              oauthToken: SecretValue.plainText(props.githubToken),
+              branch: 'main',
+              oauthToken: SecretValue.secretsManager(props.githubToken),
               trigger: codepipeline_actions.GitHubTrigger.WEBHOOK,
             }),
           ],
@@ -81,6 +112,12 @@ export class PipelineStack extends Stack {
               project: lambdaBuild,
               input: sourceOutput,
               outputs: [lambdaBuildOutput],
+            }),
+            new codepipeline_actions.CodeBuildAction({
+              actionName: 'React_Build',
+              project: reactBuild,
+              input: sourceOutput,
+              outputs: [reactBuildOutput],
             }),
             new codepipeline_actions.CodeBuildAction({
               actionName: 'CDK_Build',
