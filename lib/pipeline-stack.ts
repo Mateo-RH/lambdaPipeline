@@ -3,7 +3,14 @@ import * as codepipeline from '@aws-cdk/aws-codepipeline';
 import * as codepipeline_actions from '@aws-cdk/aws-codepipeline-actions';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as s3 from '@aws-cdk/aws-s3';
-import { App, Stack, StackProps, SecretValue } from '@aws-cdk/core';
+import * as cloudfront from '@aws-cdk/aws-cloudfront';
+import {
+  App,
+  Stack,
+  StackProps,
+  SecretValue,
+  RemovalPolicy,
+} from '@aws-cdk/core';
 
 export interface PipelineStackProps extends StackProps {
   readonly lambdaCode: lambda.CfnParametersCode;
@@ -84,10 +91,31 @@ export class PipelineStack extends Stack {
       },
     });
 
+    // Artifacts
     const sourceOutput = new codepipeline.Artifact();
     const cdkBuildOutput = new codepipeline.Artifact('CdkBuildOutput');
     const lambdaBuildOutput = new codepipeline.Artifact('LambdaBuildOutput');
     const reactBuildOutput = new codepipeline.Artifact('ReactAppOutput');
+
+    // S3;
+    // TODO: Setup access only from cf
+    const targetBucket = new s3.Bucket(this, 'ReactAppBucket', {
+      publicReadAccess: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      websiteIndexDocument: 'index.html',
+      websiteErrorDocument: 'index.html',
+    });
+    new cloudfront.CloudFrontWebDistribution(this, 'CDKCRAStaticDistribution', {
+      originConfigs: [
+        {
+          s3OriginSource: {
+            s3BucketSource: targetBucket,
+          },
+          behaviors: [{ isDefaultBehavior: true }],
+        },
+      ],
+    });
+
     new codepipeline.Pipeline(this, 'Pipeline', {
       stages: [
         {
@@ -139,6 +167,11 @@ export class PipelineStack extends Stack {
                 ...props.lambdaCode.assign(lambdaBuildOutput.s3Location),
               },
               extraInputs: [lambdaBuildOutput],
+            }),
+            new codepipeline_actions.S3DeployAction({
+              actionName: 'React_Deploy',
+              bucket: targetBucket,
+              input: reactBuildOutput,
             }),
           ],
         },
